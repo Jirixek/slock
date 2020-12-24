@@ -329,6 +329,7 @@ main(int argc, char **argv) {
 	Display *dpy;
 	int s, nlocks, nscreens;
 	CARD16 standby, suspend, off;
+	int isDPMSCapable = 1;
 
 	ARGBEGIN {
 	case 'v':
@@ -390,18 +391,20 @@ main(int argc, char **argv) {
 		return 1;
 
 	/* DPMS magic to disable the monitor */
-	if (!DPMSCapable(dpy))
-		die("slock: DPMSCapable failed\n");
-	if (!DPMSEnable(dpy))
-		die("slock: DPMSEnable failed\n");
-	if (!DPMSGetTimeouts(dpy, &standby, &suspend, &off))
-		die("slock: DPMSGetTimeouts failed\n");
-	if (!standby || !suspend || !off)
-		die("slock: at least one DPMS variable is zero\n");
-	if (!DPMSSetTimeouts(dpy, monitortime, monitortime, monitortime))
-		die("slock: DPMSSetTimeouts failed\n");
+	if (!DPMSCapable(dpy)) {
+		isDPMSCapable = 0;
+		printf("slock: DPMSCapable failed\n");
+	} else if (!DPMSEnable(dpy))
+		printf("slock: DPMSEnable failed\n");
+	else if (!DPMSGetTimeouts(dpy, &standby, &suspend, &off))
+		printf("slock: DPMSGetTimeouts failed\n");
+	else if (!standby || !suspend || !off)
+		printf("slock: at least one DPMS variable is zero\n");
+	else if (!DPMSSetTimeouts(dpy, monitortime, monitortime, monitortime))
+		printf("slock: DPMSSetTimeouts failed\n");
 
-	XSync(dpy, 0);
+	if (isDPMSCapable)
+		XSync(dpy, 0);
 
 	/* run post-lock command */
 	if (argc > 0) {
@@ -420,9 +423,11 @@ main(int argc, char **argv) {
 	/* everything is now blank. Wait for the correct password */
 	readpw(dpy, &rr, locks, nscreens, hash);
 
-	/* reset DPMS values to inital ones */
-	DPMSSetTimeouts(dpy, standby, suspend, off);
-	XSync(dpy, 0);
+	if (isDPMSCapable) {
+		/* reset DPMS values to inital ones */
+		DPMSSetTimeouts(dpy, standby, suspend, off);
+		XSync(dpy, 0);
+	}
 
 	return 0;
 }
